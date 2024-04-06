@@ -18,16 +18,28 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.util.Vector;
-import org.funty.startelytra.Main;
+import org.funty.startelytra.util.ColorUtil;
+import org.funty.startelytra.util.ConfigManager;
+import org.funty.startelytra.util.GeyserUtil;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.UUID;
 
 public class ElytraListener implements Listener {
 
-    ItemStack Elytra = new ItemStack(Material.ELYTRA);
-    ItemMeta ElytraMeta = this.Elytra.getItemMeta();
+    ItemStack elytra = new ItemStack(Material.ELYTRA);
+    ItemMeta elytraMeta = this.elytra.getItemMeta();
+
+    {
+        this.elytraMeta.setDisplayName(ChatColor.translateAlternateColorCodes('&', ConfigManager.getElytraDisplayName()));
+        this.elytraMeta.setLore(ColorUtil.color(ConfigManager.getElytraLore()));
+        this.elytraMeta.setUnbreakable(true);
+        this.elytraMeta.addEnchant(Enchantment.DURABILITY, 1000, true);
+        this.elytraMeta.addEnchant(Enchantment.BINDING_CURSE, 1, true);
+        this.elytraMeta.addEnchant(Enchantment.VANISHING_CURSE, 1, true);
+        this.elytraMeta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        this.elytra.setItemMeta(this.elytraMeta);
+    }
 
     private static final ArrayList<UUID> glider = new ArrayList<>();
 
@@ -35,77 +47,64 @@ public class ElytraListener implements Listener {
     public void onMove(PlayerMoveEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
-        Location location = event.getPlayer().getWorld().getSpawnLocation();
-        location.setX(Double.parseDouble(Main.getPlugin().getConfig().getString("Center.X")));
-        location.setY(Double.parseDouble(Main.getPlugin().getConfig().getString("Center.Y")));
-        location.setZ(Double.parseDouble(Main.getPlugin().getConfig().getString("Center.Z")));
-        int radiusC = Integer.parseInt(Main.getPlugin().getConfig().getString("Radius"));
-        int radius = radiusC * radiusC;
+        Location location = ConfigManager.getCenterLocation(player.getWorld());
+        if (event.getPlayer().getGameMode() != GameMode.SURVIVAL) return;
 
-        if (location.distanceSquared(event.getPlayer().getLocation()) <= radius) {
-            if (event.getPlayer().getGameMode() == GameMode.SURVIVAL) {
-                if (player.getLocation().add(0, -1, 0).getBlock().getType().equals(Material.AIR)) {
-                    if (!(glider.contains(player.getUniqueId()))) {
-                        glider.add(uuid);
-                        if(player.getName().startsWith(Main.getPlugin().getConfig().getString("Geysermc.Prefix"))){
-                                if(player.getInventory().getChestplate() == null){
-                                    this.ElytraMeta.setDisplayName(Main.getPlugin().getConfig().getString("Geysermc.Elytra.DisplayName"));
-                                    this.ElytraMeta.setLore(Collections.singletonList(Main.getPlugin().getConfig().getString("Geysermc.Elytra.Lore")));
-                                    this.ElytraMeta.setUnbreakable(true);
-                                    this.ElytraMeta.addEnchant(Enchantment.DURABILITY, 1000, true);
-                                    this.ElytraMeta.addEnchant(Enchantment.BINDING_CURSE, 1, true);
-                                    this.ElytraMeta.addEnchant(Enchantment.VANISHING_CURSE, 1, true);
-                                    this.ElytraMeta.addItemFlags(new ItemFlag[]{ItemFlag.HIDE_ENCHANTS});
-                                    this.Elytra.setItemMeta(this.ElytraMeta);
-                                    player.getInventory().setChestplate(this.Elytra);
-                                }else {
-                                    player.sendMessage(Main.getPlugin().getConfig().getString("Geysermc.Messages.ChestOccupied"));
-                                }
-                        }
-                        player.setGliding(true);
-                        player.setAllowFlight(true);
-                    }
-                }
-            }
-        }
-
-        if (!(player.getLocation().add(0, -1, 0).getBlock().getType().equals(Material.AIR))) {
+        if (!player.getLocation().add(0, -1, 0).getBlock().getType().isAir() &&
+                !(player.getLocation().getY() >= player.getWorld().getMaxHeight())) {
             glider.remove(uuid);
             if (event.getPlayer().getGameMode() == GameMode.SURVIVAL) player.setAllowFlight(false);
-            if(player.getName().startsWith(Main.getPlugin().getConfig().getString("Geysermc.Prefix"))){
-                if(!(player.getInventory().getChestplate() == null)){
-                    if(player.getInventory().getChestplate().equals(this.Elytra)){
-                        player.getInventory().setChestplate((ItemStack)null);
-                    }
-                }
-            }
+            if (!GeyserUtil.isBedrockPlayer(player)) return;
+            if (player.getInventory().getChestplate() == null) return;
+            if (!player.getInventory().getChestplate().equals(this.elytra)) return;
+            player.getInventory().setChestplate(null);
+            return;
         }
+
+        int radiusInBlocks = ConfigManager.getRadius();
+        int radiusSquared = radiusInBlocks * radiusInBlocks;
+        if (glider.contains(player.getUniqueId()) ||
+                location.distanceSquared(event.getPlayer().getLocation()) > radiusSquared ||
+                !player.getLocation().add(0, -1, 0).getBlock().getType().isAir()) return;
+
+        glider.add(uuid);
+        setBedrockElytra(player);
+        player.setGliding(true);
+        player.setAllowFlight(true);
+    }
+
+    public void setBedrockElytra(Player player) {
+        if (!GeyserUtil.isBedrockPlayer(player)) return;
+        if (player.getInventory().getChestplate() == null) {
+            player.getInventory().setChestplate(this.elytra);
+            return;
+        }
+        player.sendMessage(ConfigManager.getChestOccupiedMessage());
     }
 
     @EventHandler
     public void onSwapHandItems(PlayerSwapHandItemsEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
+        if (!glider.contains(uuid)) return;
 
-        if (glider.contains(uuid)) {
-            event.setCancelled(true);
-            Vector velocity = player.getLocation().getDirection().multiply(2).add(new Vector(0, Double.parseDouble((Main.getPlugin().getConfig().getString("Boost"))), 0));
-            player.setVelocity(velocity);
-        }
+        event.setCancelled(true);
+        Vector velocity;
+        if (ConfigManager.isNewBoost()) velocity = player.getLocation().getDirection().multiply(ConfigManager.getBoost());
+        else velocity = player.getLocation().getDirection().multiply(2).add(new Vector(0, ConfigManager.getBoost(), 0));
+
+        player.setVelocity(velocity);
     }
 
     @EventHandler
     public void onSneakItems(PlayerToggleSneakEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
-
-        if (event.getPlayer().getName().startsWith(Main.getPlugin().getConfig().getString("Geysermc.Prefix"))) {
-            if (glider.contains(uuid)) {
-                event.setCancelled(true);
-                Vector velocity = player.getLocation().getDirection().multiply(2).add(new Vector(0, Double.parseDouble((Main.getPlugin().getConfig().getString("Boost"))), 0));
-                player.setVelocity(velocity);
-            }
-        }
+        if (!glider.contains(uuid)) return;
+        if (!GeyserUtil.isBedrockPlayer(player)) return;
+        event.setCancelled(true);
+        Vector velocity = player.getLocation().getDirection().multiply(2).add(new Vector(0, ConfigManager.getBoost(), 0));
+        player.setVelocity(velocity);
     }
 
     @EventHandler
@@ -116,10 +115,9 @@ public class ElytraListener implements Listener {
 
     @EventHandler
     public void onGlideToggle(EntityToggleGlideEvent event) {
-        if (event.getEntityType() == EntityType.PLAYER) {
-            Player player = (Player) event.getEntity();
-            UUID uuid = player.getUniqueId();
-            if (glider.contains(uuid)) event.setCancelled(true);
-        }
+        if (event.getEntityType() != EntityType.PLAYER) return;
+        Player player = (Player) event.getEntity();
+        UUID uuid = player.getUniqueId();
+        if (glider.contains(uuid)) event.setCancelled(true);
     }
 }
