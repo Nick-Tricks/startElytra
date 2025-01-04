@@ -1,5 +1,6 @@
 # startElytra / SpawnGlide
 
+## Turns out... I'm stupid! I didn't edit the source code but just uploaded the build. Because I have a new PC the source code has been lost.
 ## A modified version of the plugin start Elytra. Changes: I fixed that above height 320 you fall down. and I removed the fall damage with this Elytra. IMPORTANT: Damage from flying into a wall has not been removed.
 
 [![wakatime](https://wakatime.com/badge/user/6dcad35f-5e14-44f1-8e50-62062cfd7011/project/aac88716-7bc5-4587-893c-11ab322437a8.svg)](https://wakatime.com/@Funty) *(monitoring since 05.12.2021)*
